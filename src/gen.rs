@@ -1,10 +1,3 @@
-enum Dir {
-    North,
-    South,
-    West,
-    East
-}
-
 #[derive(Debug)]
 pub struct MazeCell {
     pub idx: usize,
@@ -12,25 +5,18 @@ pub struct MazeCell {
     pub wall_south: bool,
     pub wall_east: bool,
     pub wall_west: bool,
+    visited: bool,
 }
 
 pub struct Maze {
     pub width: usize,
     pub height: usize,
-
-    /// Stores the state of the walls for this maze. true => wall present, false => no wall.
-    pub start_idx: usize,
     pub cells: Vec<MazeCell>,
-
-    pub carved_cells: Vec<usize>,
 }
 
 impl Maze {
     /// Generate a new maze with given width and height
-    pub fn generate(width: usize, height: usize) -> Maze {
-
-        let mut visited_stack = Vec::new();
-
+    pub fn generate(width: usize, height: usize, use_recursive: bool) -> Maze {
         let start_idx = rand::random::<usize>() % width*height;
         let mut cells = Vec::with_capacity(width*height);
         for i in 0..width*height {
@@ -39,83 +25,94 @@ impl Maze {
                 wall_north: true,
                 wall_south: true,
                 wall_east: true,
-                wall_west: true
+                wall_west: true,
+                visited: false
             });
         }
-        generate_step(start_idx, width, height, &mut visited_stack, cells.as_mut_slice());
 
-        println!("adad: {:?}", cells);
-        let mut queue = vec![start_idx];
-        let mut carved_cells = vec![];
-        while !queue.is_empty() {
-            let idx = queue.pop().unwrap();
-            let (x,y) = to_x_y(idx, width, height);
-            carved_cells.push(idx);
+        if use_recursive {
+            recursive_generate_step(start_idx, width, height, cells.as_mut_slice());
+        } else {
+            let mut visited_stack = Vec::new();
+            cells[start_idx].visited = true;
+            visited_stack.push(start_idx);
 
-            if !cells[idx].wall_east {
-                let nbor_idx = to_idx(x+1, y, width, height);
-                if !carved_cells.contains(&nbor_idx) {
-                    queue.push(nbor_idx);
-                }
-            }
+            while !visited_stack.is_empty() {
+                let cell_idx = visited_stack.pop().unwrap();
+                let (x,y) = to_x_y(cell_idx, width, height);
+                
+                let nbors: Vec<usize> = get_neighbors(cell_idx, width, height)
+                    .iter()
+                    .filter_map(|&x| {
+                        if let Some(x) = x {
+                            let ret = if !cells[x].visited {
+                                Some(x)
+                            } else {
+                                None
+                            };
 
-            if !cells[idx].wall_west {
-                let nbor_idx = to_idx(x-1, y, width, height);
-                if !carved_cells.contains(&nbor_idx) {
-                    queue.push(nbor_idx);
-                }
-            }
+                            ret
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
 
-            if !cells[idx].wall_north {
-                let nbor_idx = to_idx(x, y-1, width, height);
-                if !carved_cells.contains(&nbor_idx) {
-                    queue.push(nbor_idx);
-                }
-            }
+                if !nbors.is_empty() {
+                    visited_stack.push(cell_idx);
 
-            if !cells[idx].wall_south {
-                let nbor_idx = to_idx(x, y+1, width, height);
-                if !carved_cells.contains(&nbor_idx) {
-                    queue.push(nbor_idx);
+                    let index = rand::random::<usize>() % nbors.len();
+                    let nbor_cell_idx = nbors[index];
+                    let (nbor_x, nbor_y) = to_x_y(nbor_cell_idx, width, height);
+                    
+                    if nbor_x > x {
+                        cells[cell_idx].wall_east = false;
+                        cells[nbor_cell_idx].wall_west = false;
+                    }
+                    if nbor_x < x {
+                        cells[cell_idx].wall_west = false;
+                        cells[nbor_cell_idx].wall_east = false;
+                    }
+                    if nbor_y < y {
+                        cells[cell_idx].wall_north = false;
+                        cells[nbor_cell_idx].wall_south = false;
+                    }
+                    if nbor_y > y {
+                        cells[cell_idx].wall_south = false;
+                        cells[nbor_cell_idx].wall_north = false;
+                    }
+
+                    cells[nbor_cell_idx].visited = true;
+                    visited_stack.push(nbor_cell_idx);
                 }
             }
         }
-
+        
         Maze {
             width,
             height,
             cells,
-            start_idx,
-            carved_cells
         }
     }
 }
 
-fn generate_step(cell_idx: usize, width: usize, height: usize, visited_stack: &mut Vec<usize>, cells: &mut [MazeCell]) {
-    visited_stack.push(cell_idx);
-    let (x,y) = to_x_y(cell_idx, width, height);
-    println!("x: {}, y: {}", x,y);
+fn recursive_generate_step(cell_idx: usize, width: usize, height: usize, cells: &mut [MazeCell]) {
+    cells[cell_idx].visited = true;
 
-    let nbors = get_neighbors(cell_idx, width, height);
-    let mut unvisited_nbors: Vec<usize> = nbors
+    let (x,y) = to_x_y(cell_idx, width, height);
+    let mut nbors: Vec<usize> = get_neighbors(cell_idx, width, height)
         .iter()
-        .filter_map(|&x| {
-            if let Some(x) = x {
-                let ret = if !visited_stack.contains(&x) {
-                    Some(x)
-                } else {
-                    None
-                };
-                ret
-            } else {
-                None
-            }
-        })
+        .filter_map(|&x| x)
         .collect();
     
-    while !unvisited_nbors.is_empty() {
-        let index = rand::random::<usize>() % unvisited_nbors.len();
-        let nbor_cell_idx = unvisited_nbors[index];
+    while !nbors.is_empty() {
+        let index = rand::random::<usize>() % nbors.len();
+        let nbor_cell_idx = nbors[index];
+        if cells[nbor_cell_idx].visited {
+            nbors.remove(index);
+            continue;
+        }
+
         let (nbor_x, nbor_y) = to_x_y(nbor_cell_idx, width, height);
 
         if nbor_x > x {
@@ -134,11 +131,10 @@ fn generate_step(cell_idx: usize, width: usize, height: usize, visited_stack: &m
             cells[cell_idx].wall_south = false;
             cells[nbor_cell_idx].wall_north = false;
         }
-        unvisited_nbors.remove(index);
 
-        generate_step(nbor_cell_idx, width, height, visited_stack, cells);
+        recursive_generate_step(nbor_cell_idx, width, height, cells);
+        nbors.remove(index);
     }
-    
 }
 
 pub fn to_x_y(cell_idx: usize, width: usize, height: usize) -> (usize, usize) {
@@ -161,7 +157,7 @@ pub fn get_neighbors(cell_idx: usize, width: usize, height: usize) -> [Option<us
         None
     };
 
-    let south = if y < height - 1{
+    let south = if y < height - 1 {
         Some(to_idx(x,y+1, width, height))
     } else {
         None
