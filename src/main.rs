@@ -2,6 +2,7 @@
 mod gen;
 mod viz;
 
+use gen::Maze;
 use minifb::{Key, Window, WindowOptions};
 
 const WIDTH: usize = 640;
@@ -23,12 +24,10 @@ fn main() {
     // Limit to max ~60 fps update rate
     window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
 
-    while window.is_open() && !window.is_key_down(Key::Escape) {
-        for i in buffer.iter_mut() {
-            *i = 10; // write something more funny here!
-        }
+    let maze = Maze::generate(WIDTH/10, HEIGHT/10);
 
-        // We unwrap here as we want this code to exit if it fails. Real applications may want to handle this in a different way
+    while window.is_open() && !window.is_key_down(Key::Escape) {
+        viz::draw(&maze, buffer.as_mut_slice(), WIDTH, HEIGHT);
         window
             .update_with_buffer(&buffer, WIDTH, HEIGHT)
             .unwrap();
