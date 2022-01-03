@@ -2,7 +2,7 @@
 mod gen;
 mod viz;
 
-use gen::Maze;
+use gen::{Maze, RecursiveBacktracker, MazeGenerator, RecursiveDivision};
 use minifb::{Key, Window, WindowOptions};
 
 const WIDTH: usize = 640*2;
@@ -22,12 +22,18 @@ fn main() {
         panic!("{}", e);
     });
 
-    // Limit to max ~60 fps update rate
+    // Limit to max ~12 fps update rate
     window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
 
     let mut maze_width = 5;
     let mut maze_height = 5;
-    let mut maze = Maze::generate(maze_width, maze_height, false);
+    let mut maze = Maze::empty(maze_width, maze_height);
+
+    let mut generator = RecursiveDivision::new(100);
+    generator.initialize(&mut maze);
+
+    let mut step_interval = 0.1;
+    let mut last_time = std::time::SystemTime::now();
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let mut should_regen = false;
@@ -44,10 +50,27 @@ fn main() {
             should_regen = true;
         }
 
+        if window.is_key_pressed(Key::P, minifb::KeyRepeat::No) {
+            step_interval /= 2.0;
+        } else if window.is_key_pressed(Key::O, minifb::KeyRepeat::No) {
+            step_interval *= 2.0;
+        }
+
         if should_regen {
-            window.set_title("Regenerating..");
-            maze = Maze::generate(maze_width, maze_height, false);
-            window.set_title(title);
+            maze = Maze::empty(maze_width, maze_height);
+            generator = RecursiveDivision::new(100);
+            generator.initialize(&mut maze);
+        }
+
+        let now = std::time::SystemTime::now();
+        let dur = now.duration_since(last_time).unwrap().as_secs_f64();
+        if dur > step_interval {
+            loop {
+                if generator.step(&mut maze) {
+                    break;
+                }
+            }
+            last_time += std::time::Duration::from_secs_f64(dur);
         }
 
         viz::draw(&maze, buffer.as_mut_slice(), WIDTH, HEIGHT);
