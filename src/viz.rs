@@ -1,16 +1,9 @@
 //  Copyright (c) Klas Henriksson 2022.
 //  All rights reserved.
 
-use crate::gen::{Maze, self};
+use crate::gen::{Maze, self, Dir};
 
 const WALL_COLOR: u32 = 0xffffffff;
-
-enum Dir {
-    East,
-    North,
-    West,
-    South
-}
 
 pub struct MazeVizDescritptor {
     pub offset_x: usize,

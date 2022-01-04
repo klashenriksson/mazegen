@@ -3,6 +3,14 @@
 
 use std::collections::VecDeque;
 
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum Dir {
+    East,
+    North,
+    West,
+    South
+}
+
 #[derive(Debug)]
 pub struct MazeCell {
     pub idx: usize,
@@ -120,7 +128,13 @@ impl MazeGenerator for RecursiveBacktracker {
     }
 
     fn initialize(&mut self, maze: &mut Maze) {
-        *self = RecursiveBacktracker::new();
+        // Add all walls
+        for cell in maze.cells.iter_mut() {
+            cell.wall_east = true;
+            cell.wall_west = true;
+            cell.wall_south = true;
+            cell.wall_north = true;
+        }
 
         let start_idx = rand::random::<usize>() % maze.cells.len();
         maze.cells[start_idx].visited = true;
@@ -311,6 +325,108 @@ impl MazeGenerator for RecursiveDivision {
     }
 }
 
+pub struct BinaryTree {
+    curr_idx: usize,
+    end_idx: usize,
+    dir_1: Dir,
+    dir_2: Dir
+}
+
+impl BinaryTree {
+    /// Construct a new BinaryTree maze generator.
+    /// Note: Currently no direction validation is done, except for if dir_1 == dir_2
+    /// So choosing direction along the same axis is allowed, but produces very boring mazes.
+    pub fn new(dir_1: Dir, dir_2: Dir) -> Self {
+
+        if dir_1 == dir_2 {
+            panic!("dir_1 and dir_2 must not be equal!");
+        }
+
+        Self {
+            curr_idx: 0,
+            end_idx: 0,
+            dir_1,
+            dir_2,
+        }
+    }
+}
+
+impl MazeGenerator for BinaryTree {
+    fn step(&mut self, maze: &mut Maze) {
+        if self.is_finished() {
+            return;
+        }
+
+        let r = rand::random::<usize>() % 2;
+        let (mut dir, other_dir) = if r == 0 {
+            (self.dir_1, self.dir_2)
+        } else {
+            (self.dir_2, self.dir_1)
+        };
+        
+        let (x,y) = to_x_y(self.curr_idx, maze.width);
+        
+        //  Bound check if we are on the boundary
+        if dir == Dir::North && y == 0 {
+            if (x == 0 && other_dir == Dir::West) || (x == maze.width - 1 && other_dir == Dir::East) {
+                self.curr_idx += 1;
+                return;
+            } else {
+                dir = other_dir;
+            }
+        }
+        else if dir == Dir::South && y == maze.height - 1 {
+            if (x == 0 && other_dir == Dir::West) || (x == maze.width - 1 && other_dir == Dir::East) {
+                self.curr_idx += 1;
+                return;
+            } else {
+                dir = other_dir;
+            }
+        }
+        else if dir == Dir::West && x == 0 {
+            if (y == 0 && other_dir == Dir::North) || (y == maze.height - 1 && other_dir == Dir::South) {
+                self.curr_idx += 1;
+                return;
+            } else {
+                dir = other_dir
+            }
+        }
+        else if dir == Dir::East && x == maze.width - 1 {
+            if (y == 0 && other_dir == Dir::North) || (y == maze.height - 1 && other_dir == Dir::South) {
+                self.curr_idx += 1;
+                return;
+            } else {
+                dir = other_dir
+            }
+        }
+
+        let (nbor_x, nbor_y) = match dir {
+            Dir::North => (x, y - 1),
+            Dir::South => (x, y + 1),
+            Dir::East => (x + 1, y),
+            Dir::West => (x - 1, y)
+        };
+        remove_wall(self.curr_idx, to_idx(nbor_x, nbor_y, maze.width), maze.width, maze.cells.as_mut_slice());
+        self.curr_idx+=1;
+    }
+
+    fn is_finished(&self) -> bool {
+        self.curr_idx > self.end_idx
+    }
+
+    fn initialize(&mut self, maze: &mut Maze) {
+        self.end_idx = maze.cells.len()-1;
+
+        // Add all walls
+        for cell in maze.cells.iter_mut() {
+            cell.wall_east = true;
+            cell.wall_west = true;
+            cell.wall_south = true;
+            cell.wall_north = true;
+        }
+    }
+}
+
 /// Removes wall between cell_idx and nbor_cell_idx
 fn remove_wall(cell_idx: usize, nbor_cell_idx: usize, width: usize, cells: &mut [MazeCell]) {
     let (x,y) = to_x_y(cell_idx, width);
@@ -368,7 +484,6 @@ pub fn to_idx(x: usize, y: usize, width: usize) -> usize {
 /// Returns the neighbor indices of cell with index *cell_idx*. Returns in order CCW order starting from north
 /// (i.e) north, west, south, east
 pub fn get_neighbors(cell_idx: usize, width: usize, height: usize) -> [Option<usize>;4] {
-
     let (x,y) = to_x_y(cell_idx, width);
 
     let north = if y > 0 {

@@ -4,7 +4,7 @@
 mod gen;
 mod viz;
 
-use gen::{Maze, RecursiveBacktracker, MazeGenerator, RecursiveDivision};
+use gen::{Maze, RecursiveBacktracker, MazeGenerator, RecursiveDivision, BinaryTree};
 use minifb::{Key, Window, WindowOptions};
 use viz::{MazeVizDescritptor, Framebuffer};
 
@@ -13,14 +13,16 @@ const HEIGHT: usize = 360*2;
 
 #[derive(Debug, Clone, Copy)]
 enum GeneratorType {
-    RecursiveBacktracker = 0,
-    RecursiveDivision
+    RecursiveBacktracker,
+    RecursiveDivision,
+    BinaryTree
 }
 
 fn create_generator(ty: GeneratorType) -> Box<dyn MazeGenerator> {
     match ty {
         GeneratorType::RecursiveBacktracker => Box::new(RecursiveBacktracker::new()),
-        GeneratorType::RecursiveDivision => Box::new(RecursiveDivision::new(100))
+        GeneratorType::RecursiveDivision => Box::new(RecursiveDivision::new(100)),
+        GeneratorType::BinaryTree => Box::new(BinaryTree::new(gen::Dir::North, gen::Dir::East)),
     }
 }
 
@@ -73,7 +75,8 @@ fn main() {
         } else if window.is_key_pressed(Key::C, minifb::KeyRepeat::No) {
             current_type = match current_type {
                 GeneratorType::RecursiveBacktracker => GeneratorType::RecursiveDivision,
-                GeneratorType::RecursiveDivision => GeneratorType::RecursiveBacktracker
+                GeneratorType::RecursiveDivision => GeneratorType::BinaryTree,
+                GeneratorType::BinaryTree => GeneratorType::RecursiveBacktracker,
             };
 
             should_regen = true;
@@ -86,6 +89,8 @@ fn main() {
         }
 
         if should_regen {
+            window.set_title("Regenerating...");
+            
             maze = Maze::empty(maze_width, maze_height);
             generator = create_generator(current_type);
             generator.initialize(&mut maze);
