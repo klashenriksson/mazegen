@@ -1,3 +1,5 @@
+//  Copyright (c) Klas Henriksson 2022.
+//  All rights reserved.
 
 mod gen;
 mod viz;
@@ -9,6 +11,19 @@ use viz::{MazeVizDescritptor, Framebuffer};
 const WIDTH: usize = 640*2;
 const HEIGHT: usize = 360*2;
 
+#[derive(Debug, Clone, Copy)]
+enum GeneratorType {
+    RecursiveBacktracker = 0,
+    RecursiveDivision
+}
+
+fn create_generator(ty: GeneratorType) -> Box<dyn MazeGenerator> {
+    match ty {
+        GeneratorType::RecursiveBacktracker => Box::new(RecursiveBacktracker::new()),
+        GeneratorType::RecursiveDivision => Box::new(RecursiveDivision::new(100))
+    }
+}
+
 fn main() {
     let mut framebuffer = Framebuffer {
         buffer: vec![0; WIDTH * HEIGHT],
@@ -16,10 +31,8 @@ fn main() {
         height: HEIGHT
     };
 
-    let title = "MazeGen. R to regenerate, 1 to double maze size, 2 to halve maze size";
-
     let mut window = Window::new(
-        title,
+        "Maze Gen",
         WIDTH,
         HEIGHT,
         WindowOptions::default(),
@@ -37,7 +50,8 @@ fn main() {
 
     let mut viz_desc = MazeVizDescritptor::new(50,50,WIDTH-100, HEIGHT-100, maze.width, maze.height);
 
-    let mut generator = RecursiveDivision::new(100);
+    let mut current_type = GeneratorType::RecursiveDivision;
+    let mut generator = create_generator(current_type);
     generator.initialize(&mut maze);
 
     let mut step_interval = 0.1;
@@ -56,6 +70,13 @@ fn main() {
             maze_height = 1.max(maze_height/2);
         } else if window.is_key_pressed(Key::R, minifb::KeyRepeat::No) {
             should_regen = true;
+        } else if window.is_key_pressed(Key::C, minifb::KeyRepeat::No) {
+            current_type = match current_type {
+                GeneratorType::RecursiveBacktracker => GeneratorType::RecursiveDivision,
+                GeneratorType::RecursiveDivision => GeneratorType::RecursiveBacktracker
+            };
+
+            should_regen = true;
         }
 
         if window.is_key_pressed(Key::P, minifb::KeyRepeat::No) {
@@ -66,20 +87,22 @@ fn main() {
 
         if should_regen {
             maze = Maze::empty(maze_width, maze_height);
-            generator = RecursiveDivision::new(100);
+            generator = create_generator(current_type);
             generator.initialize(&mut maze);
 
             viz_desc.rescale(maze_width, maze_height);
         }
 
+        let title = format!(
+            "MazeGen. Controls: 1/2: Double/Half maze size. Curr: {}x{} R: Regen maze. P/O: (In)/(De)crease step freq. Curr: {}/s C: Cycle gen algo. Curr: {:?}",
+            maze.width, maze.height, 1.0/step_interval, current_type
+        );
+        window.set_title(title.as_str());
+
         let now = std::time::SystemTime::now();
         let dur = now.duration_since(last_time).unwrap().as_secs_f64();
         if dur > step_interval {
-            loop {
-                if generator.step(&mut maze) {
-                    break;
-                }
-            }
+            generator.step(&mut maze);
             last_time += std::time::Duration::from_secs_f64(dur);
         }
 

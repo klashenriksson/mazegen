@@ -1,6 +1,8 @@
+//  Copyright (c) Klas Henriksson 2022.
+//  All rights reserved.
+
 use crate::gen::{Maze, self};
 
-const PATH_COLOR: u32 = 0x0;
 const WALL_COLOR: u32 = 0xffffffff;
 
 enum Dir {

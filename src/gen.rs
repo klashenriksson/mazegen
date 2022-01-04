@@ -1,3 +1,6 @@
+//  Copyright (c) Klas Henriksson 2022.
+//  All rights reserved.
+
 use std::collections::VecDeque;
 
 #[derive(Debug)]
@@ -40,8 +43,8 @@ impl Maze {
 }
 
 pub trait MazeGenerator {
-    /// Perform a step of the maze generator
-    fn step(&mut self, maze: &mut Maze) -> bool;
+    /// Perform a step of the maze generator.
+    fn step(&mut self, maze: &mut Maze);
     /// Returns true if the generation is complete. Othewerise false.
     fn is_finished(&self) -> bool;
     
@@ -65,14 +68,18 @@ impl RecursiveBacktracker {
 }
 
 impl MazeGenerator for RecursiveBacktracker {
-    fn step(&mut self, maze: &mut Maze) -> bool {
+    fn step(&mut self, maze: &mut Maze) {
         if self.visited_stack.is_empty() { // If the visited stack is empty and we arent on gen 0, we are done.
             self.finished = true;
-            return true;
+            return;
         }
 
         //  Perform a step of the recursive backtracking algo.
+
+        //  Get most recent cell
         let cell_idx = self.visited_stack.pop().unwrap();
+
+        //  Fetch neighboring cells that havent been visited
         let nbors: Vec<usize> = get_neighbors(cell_idx, maze.width, maze.height)
             .iter()
             .filter_map(|&x| {
@@ -91,19 +98,20 @@ impl MazeGenerator for RecursiveBacktracker {
             .collect();
 
         if !nbors.is_empty() {
+            //  Add ourselves back into the stack to facillitate backtracking
             self.visited_stack.push(cell_idx);
+
+            //  Carve out a path to a random unvisited neighbor and add neighbor to the stack
             let index = self.gen_iteration % nbors.len();
             let nbor_cell_idx = nbors[index];
-
             remove_wall(cell_idx, nbor_cell_idx, maze.width, maze.cells.as_mut_slice());
-
             maze.cells[nbor_cell_idx].visited = true;
             self.visited_stack.push(nbor_cell_idx);
             self.gen_iteration += 1;
-
-            true
         } else {
-            false
+            //  If we dont have any neighbors we backtrack to previous cell until we have one!
+            //  We do this here to avoid steps that simply pop the visited stack.
+            self.step(maze);
         }
     }
 
@@ -136,6 +144,8 @@ struct FieldIntersection {
 }
 
 impl Field {
+    ///     Tries to subdivide itself into two fields. If *horizontally* is true it divides the field horizontally,
+    ///     otherwise vertically.
     pub fn divide(self, horizontally: bool) -> Option<(Field, Field, FieldIntersection)> {
         if self.width < 2 || self.height < 2 {
             return None;
@@ -196,30 +206,39 @@ impl Field {
 
 pub struct RecursiveDivision {
     gen_iteration: usize,
-    resolution: usize,
+    max_subdivides: usize,
     fields: VecDeque<Field>,
 }
 
 impl RecursiveDivision {
-    pub fn new(resolution: usize) -> Self {
+    pub fn new(max_subdivides: usize) -> Self {
         Self {
             gen_iteration: 0,
-            resolution,
+            max_subdivides,
             fields: VecDeque::new()
         }
     }
 }
 
 impl MazeGenerator for RecursiveDivision {
-    fn step(&mut self, maze: &mut Maze) -> bool {
-        if self.gen_iteration == self.resolution {
-            return true;
+    fn step(&mut self, maze: &mut Maze) {
+        if self.gen_iteration == self.max_subdivides {
+            return;
         }
 
+        //  Perform one subdivision.
+        //  Note that this subdivides ALL current fields (thats the while loop) (this is what one considers a iteration)
+        //  This is done to speed up the visualization and not have to watch each subfield subdivide itself one at a time
         let field_count = self.fields.len();
         let mut processed = 0;
         while processed < field_count {
+
+            //  Fetch oldest field
             let field = self.fields.pop_front().unwrap();
+
+            //  Determine if we should subdivide the field horizontally or vertically.
+            //  If the field's height is larget than its width, we split it horizontally to
+            //  construct more interesting mazes. Similarily if its width is greather than its height.
             let horiz = if field.height > field.width { 
                 true
             } else if field.width > field.height {
@@ -228,8 +247,13 @@ impl MazeGenerator for RecursiveDivision {
                 rand::random::<usize>() % 2 == 0
             };
 
+            //  Try to subdivide it
             if let Some((field_1, field_2, intersection)) = field.divide(horiz) {
+
+                //  Choose where to make a gap in the wall
                 let skip = intersection.start + rand::random::<usize>() % (intersection.end-intersection.start);
+
+                //  Add wall to construct the division
                 if horiz {
                     let y = intersection.split_coord;
                     for x in intersection.start..intersection.end {
@@ -255,6 +279,7 @@ impl MazeGenerator for RecursiveDivision {
                     }
                 }
 
+                //  Add the two newly created fields into the queue
                 self.fields.push_back(field_1);
                 self.fields.push_back(field_2);
             }
@@ -262,11 +287,10 @@ impl MazeGenerator for RecursiveDivision {
         }
 
         self.gen_iteration += 1;
-        true
     }
 
     fn is_finished(&self) -> bool {
-        self.gen_iteration == self.resolution
+        self.gen_iteration == self.max_subdivides
     }
 
     fn initialize(&mut self, maze: &mut Maze) {
