@@ -4,12 +4,18 @@ mod viz;
 
 use gen::{Maze, RecursiveBacktracker, MazeGenerator, RecursiveDivision};
 use minifb::{Key, Window, WindowOptions};
+use viz::{MazeVizDescritptor, Framebuffer};
 
 const WIDTH: usize = 640*2;
 const HEIGHT: usize = 360*2;
 
 fn main() {
-    let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
+    let mut framebuffer = Framebuffer {
+        buffer: vec![0; WIDTH * HEIGHT],
+        width: WIDTH,
+        height: HEIGHT
+    };
+
     let title = "MazeGen. R to regenerate, 1 to double maze size, 2 to halve maze size";
 
     let mut window = Window::new(
@@ -28,6 +34,8 @@ fn main() {
     let mut maze_width = 5;
     let mut maze_height = 5;
     let mut maze = Maze::empty(maze_width, maze_height);
+
+    let mut viz_desc = MazeVizDescritptor::new(50,50,WIDTH-100, HEIGHT-100, maze.width, maze.height);
 
     let mut generator = RecursiveDivision::new(100);
     generator.initialize(&mut maze);
@@ -60,6 +68,8 @@ fn main() {
             maze = Maze::empty(maze_width, maze_height);
             generator = RecursiveDivision::new(100);
             generator.initialize(&mut maze);
+
+            viz_desc.rescale(maze_width, maze_height);
         }
 
         let now = std::time::SystemTime::now();
@@ -73,9 +83,10 @@ fn main() {
             last_time += std::time::Duration::from_secs_f64(dur);
         }
 
-        viz::draw(&maze, buffer.as_mut_slice(), WIDTH, HEIGHT);
+        framebuffer.clear(0x0);
+        framebuffer.draw_maze(&maze, &viz_desc);
         window
-            .update_with_buffer(&buffer, WIDTH, HEIGHT)
+            .update_with_buffer(&framebuffer.buffer.as_slice(), framebuffer.width, framebuffer.height)
             .unwrap();
     }
 }
